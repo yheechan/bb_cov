@@ -1,27 +1,27 @@
-ifeq (, $(shell which llvm-config))
-$(error "No llvm-config in $$PATH")
+ifeq (, $(shell which llvm-config-20))
+$(error "No llvm-config-20 in $$PATH")
 endif
 
-LLVMVER  = $(shell llvm-config --version 2>/dev/null | sed 's/git//' | sed 's/svn//' )
-LLVM_MAJOR = $(shell llvm-config --version 2>/dev/null | sed 's/\..*//' )
-LLVM_MINOR = $(shell llvm-config --version 2>/dev/null | sed 's/.*\.//' | sed 's/git//' | sed 's/svn//' | sed 's/ .*//' )
+LLVMVER  = $(shell llvm-config-20 --version 2>/dev/null | sed 's/git//' | sed 's/svn//' )
+LLVM_MAJOR = $(shell llvm-config-20 --version 2>/dev/null | sed 's/\..*//' )
+LLVM_MINOR = $(shell llvm-config-20 --version 2>/dev/null | sed 's/.*\.//' | sed 's/git//' | sed 's/svn//' | sed 's/ .*//' )
 $(info Detected LLVM VERSION : $(LLVMVER))
 
-CC=clang
-CXX=clang++
-CFLAGS=`llvm-config --cflags` -fPIC -O2
+CC=clang-20
+CXX=clang++-20
+CFLAGS=`llvm-config-20 --cflags` -fPIC -O2
 AR=ar
 
 DEBUG ?= 1
 ifeq ($(DEBUG), 1)
-	CXXFLAGS=`llvm-config --cxxflags` -fPIC -ggdb -O0 -DDEBUG
+	CXXFLAGS=`llvm-config-20 --cxxflags` -fPIC -ggdb -O0 -DDEBUG
 else
-	CXXFLAGS=`llvm-config --cxxflags` -fPIC -g -O2
+	CXXFLAGS=`llvm-config-20 --cxxflags` -fPIC -g -O2
 endif
 
 CXXFLAGS += -DLLVM_MAJOR=$(LLVM_MAJOR)
 
-LDFLAGS = `llvm-config --ldflags --system-libs --libs core passes`
+LDFLAGS = `llvm-config-20 --ldflags --system-libs --libs core passes`
 
 all: bb_cov path_cov func_seq
 
