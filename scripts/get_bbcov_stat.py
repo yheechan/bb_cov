@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os, sys, glob, tqdm
 import json
+import re
 
 
 def get_bb_cov(cov_file: str) -> dict[str, dict[str, dict[str, bool]]]:
@@ -16,24 +17,27 @@ def get_bb_cov(cov_file: str) -> dict[str, dict[str, dict[str, bool]]]:
         line = line.strip()
         if line == "":
             continue
-        line = line.split(" ")
 
-        if len(line) < 2:
-            continue
-
-        if line[0] == "File":
-            cur_file = line[1]
+        # Match "File <filename>"
+        file_match = re.match(r'^File\s+(.+)$', line)
+        if file_match:
+            cur_file = file_match.group(1)
             cov_data[cur_file] = {}
             continue
 
-        if line[0] == "F":
-            cur_func = line[1]
+        # Match "F <function_name> <count>"
+        func_match = re.match(r'^F\s+(.+?)\s+(\d+)$', line)
+        if func_match:
+            cur_func = func_match.group(1)
             cov_data[cur_file][cur_func] = {}
             continue
 
-        cur_bb = line[1]
-        covered = line[2] == "1"
-        cov_data[cur_file][cur_func][cur_bb] = covered
+        # Match "B <bb_range> <covered>"
+        bb_match = re.match(r'^B\s+(.+?)\s+(\d+)$', line)
+        if bb_match:
+            cur_bb = bb_match.group(1)
+            covered = bb_match.group(2) == "1"
+            cov_data[cur_file][cur_func][cur_bb] = covered
 
     covf.close()
     return cov_data
