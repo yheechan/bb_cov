@@ -22,10 +22,11 @@ static char *bb_cov_arr = nullptr;
 
 namespace fs = std::filesystem;
 
-static std::mutex cov_mutex;
-
 static std::map<std::string, std::map<std::string, std::set<std::string>>>
     prev_cov;
+
+#pragma clang attribute push(__attribute__((annotate("probe_function"))), \
+                             apply_to = function)
 
 extern "C" {
 
@@ -66,6 +67,10 @@ void __handle_init(int32_t *argc_ptr, char **argv) {
   if (env_output_fn != nullptr) {
     cov_output_fn = env_output_fn;
 
+    std::cout << "[bb_cov] Found environment variable " << OUTPUT_FN
+              << ", setting coverage output file to " << cov_output_fn
+              << std::endl;
+
     // Initialize bb_cov_arr
     bb_cov_arr = (char *)malloc(__num_bbs);
     if (bb_cov_arr == nullptr) {
@@ -73,11 +78,10 @@ void __handle_init(int32_t *argc_ptr, char **argv) {
                 << std::endl;
       exit(1);
     }
+
     memset(bb_cov_arr, 0, __num_bbs);
 
     std::cout << "[bb_cov] Found " << __num_bbs << " basic blocks to track."
-              << std::endl;
-    std::cout << "[bb_cov] Coverage output file: " << cov_output_fn
               << std::endl;
     return;
   }
@@ -113,6 +117,7 @@ void __handle_init(int32_t *argc_ptr, char **argv) {
               << std::endl;
     exit(1);
   }
+
   memset(bb_cov_arr, 0, __num_bbs);
 
   if (placeholder_idx == -1) {
@@ -224,8 +229,12 @@ void __record_bb_cov(const char *file_name, const char *func_name,
                      const char *bb_name, const uint32_t bb_id) {
   if (bb_cov_arr == nullptr) { return; }
 
+  // Hack to reduce lock contention
+  if (bb_cov_arr[bb_id] == 1) { return; }
+
   {
-    std::lock_guard<std::mutex> guard(cov_mutex);
+    static std::mutex           bb_cov_mutex;
+    std::lock_guard<std::mutex> guard(bb_cov_mutex);
     if (bb_cov_arr[bb_id] == 1) { return; }
     bb_cov_arr[bb_id] = 1;
   }
@@ -267,6 +276,9 @@ static void __write_cov() {
     std::cerr << "[bb_cov] No coverage information collected." << std::endl;
     return;
   }
+
+  static std::mutex           write_mutex;
+  std::lock_guard<std::mutex> guard(write_mutex);
 
   std::ofstream cov_file_out(cov_output_fn, std::ios::out);
   if (!cov_file_out.is_open()) {
@@ -341,6 +353,11 @@ static void __write_cov() {
 
 static void __cov_read_prev_cov() {
   if (cov_output_fn == nullptr) { return; }
+
+  static std::mutex           read_prev_cov_mutex;
+  std::lock_guard<std::mutex> guard(read_prev_cov_mutex);
+
+  if (prev_cov.size() != 0) { return; }
 
   std::ifstream cov_file_in(cov_output_fn, std::ios::in);
   if (!cov_file_in.is_open()) { return; }
@@ -419,19 +436,12 @@ static void __cov_read_prev_cov() {
 }
 
 void __cov_fini() {
-  std::lock_guard<std::mutex> guard(cov_mutex);
-
   if (bb_cov_arr == nullptr) { return; }
 
   // previous coverage collected from existing coverage files
 #ifndef WRITE_COV_PER_BB
   __cov_read_prev_cov();
 #endif
-
-  if (bb_cov_arr == nullptr) {
-    std::cout << "[bb_cov] No coverage information collected." << std::endl;
-    return;
-  }
 
   std::cout << "[bb_cov] Writing coverage info to files..." << std::endl;
   __write_cov();
@@ -442,3 +452,5 @@ void __cov_fini() {
 }
 
 }  // extern "C"
+
+#pragma clang attribute pop
